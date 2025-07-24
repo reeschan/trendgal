@@ -1,4 +1,4 @@
-import { Product, DetectedItem, AnalysisResult, GalMessage } from '@/types/product';
+import { Product, DetectedItem, AnalysisResult } from '@/types/product';
 import { GalMessage as ApiGalMessage } from '@/types/api';
 
 export const mockProducts: Product[] = [

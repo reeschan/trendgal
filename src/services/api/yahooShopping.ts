@@ -117,7 +117,7 @@ export class YahooShoppingService {
         console.log('ResultSetの詳細:', {
           totalResultsAvailable: data.ResultSet.totalResultsAvailable,
           totalResultsReturned: data.ResultSet.totalResultsReturned,
-          firstResultStart: data.ResultSet.firstResultPosition
+          firstResultStart: (data.ResultSet as any).firstResultPosition
         });
         return [];
       }

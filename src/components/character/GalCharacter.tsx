@@ -57,11 +57,11 @@ export const GalCharacter = ({
   };
 
   const transitionConfig = {
-    excited: { duration: 0.6, repeat: Infinity, ease: 'easeInOut' },
-    thinking: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-    happy: { duration: 1, repeat: Infinity, ease: 'easeInOut' },
+    excited: { duration: 0.6, repeat: Infinity, ease: "easeInOut" as const },
+    thinking: { duration: 2, repeat: Infinity, ease: "easeInOut" as const },
+    happy: { duration: 1, repeat: Infinity, ease: "easeInOut" as const },
     surprised: { duration: 0.5, repeat: 2 },
-    winking: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' }
+    winking: { duration: 0.8, repeat: Infinity, ease: "easeInOut" as const }
   };
 
   return (

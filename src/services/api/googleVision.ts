@@ -62,7 +62,7 @@ export class GoogleVisionService {
         labelAnnotations: result.labelAnnotations?.map(label => ({
           description: label.description || '',
           score: label.score || 0,
-          mid: label.mid
+          mid: label.mid || undefined
         })) || [],
         
         imagePropertiesAnnotation: {
@@ -71,7 +71,7 @@ export class GoogleVisionService {
               red: color.color?.red || 0,
               green: color.color?.green || 0,
               blue: color.color?.blue || 0,
-              alpha: color.color?.alpha,
+              alpha: color.color?.alpha?.value || undefined,
               score: color.score || 0,
               pixelFraction: color.pixelFraction || 0
             })) || []

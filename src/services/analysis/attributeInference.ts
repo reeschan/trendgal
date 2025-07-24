@@ -234,18 +234,15 @@ export class AttributeInferenceService {
         mockProducts.push({
           id: `mock_${item.id}_${i}`,
           name: `${colorName}${categoryName} - サンプル商品${i + 1}`,
-          brand: 'サンプルブランド',
           price: 1980 + Math.floor(Math.random() * 3000),
           originalPrice: 2980 + Math.floor(Math.random() * 3000),
-          image: '/images/placeholder.svg',
-          url: '#',
+          imageUrl: '/images/placeholder.svg',
+          shopName: 'サンプルブランド',
+          shopUrl: '#',
           category: item.type as any,
+          tags: [categoryName, colorName],
           rating: 4.0 + Math.random(),
-          reviewCount: Math.floor(Math.random() * 200) + 10,
-          description: `${item.description}に似たアイテムです（サンプル）`,
-          availability: true,
-          shipping: '送料無料',
-          tags: [categoryName, colorName]
+          reviewCount: Math.floor(Math.random() * 200) + 10
         });
       }
     });
@@ -269,18 +266,15 @@ export class AttributeInferenceService {
     return {
       id: `yahoo_${Math.random().toString(36).substr(2, 9)}`,
       name: yahooProduct.Name,
-      brand: yahooProduct.Brand || 'ブランド名不明',
       price: parseInt(yahooProduct.Price) || 0,
       originalPrice: parseInt(yahooProduct.Price) || 0,
-      image: yahooProduct.Image?.Medium || yahooProduct.Image?.Small || '',
-      url: yahooProduct.Url,
+      imageUrl: yahooProduct.Image?.Medium || yahooProduct.Image?.Small || '',
+      shopName: yahooProduct.Brand || 'ブランド名不明',
+      shopUrl: yahooProduct.Url,
       category: category as any,
+      tags: [category],
       rating: yahooProduct.Review?.Rate ? parseFloat(yahooProduct.Review.Rate) : undefined,
-      reviewCount: yahooProduct.Review?.Count ? parseInt(yahooProduct.Review.Count) : undefined,
-      description: yahooProduct.Description || yahooProduct.Name,
-      availability: true,
-      shipping: yahooProduct.Shipping || '送料別',
-      tags: [category]
+      reviewCount: yahooProduct.Review?.Count ? parseInt(yahooProduct.Review.Count) : undefined
     };
   }
 

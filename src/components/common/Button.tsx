@@ -39,7 +39,7 @@ export const Button = ({
       whileTap={{ scale: disabled || isLoading ? 1 : 0.95 }}
       className={classes}
       disabled={disabled || isLoading}
-      {...props}
+      {...(props as any)}
     >
       {isLoading ? (
         <div className="flex items-center justify-center">
