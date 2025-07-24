@@ -11,7 +11,12 @@ export class GoogleVisionService {
         throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY environment variable is not set');
       }
 
-      const serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      let serviceAccountKey;
+      try {
+        serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      } catch (parseError) {
+        throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY must be a valid JSON service account key, not an API key');
+      }
       
       // 秘密鍵の改行文字を正しく処理
       if (serviceAccountKey.private_key) {
