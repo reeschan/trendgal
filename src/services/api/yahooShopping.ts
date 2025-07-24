@@ -99,31 +99,33 @@ export class YahooShoppingService {
       
       console.log('📦 Yahoo Shopping API レスポンス:', {
         query: query,
-        totalResults: data.ResultSet?.totalResultsAvailable || 0,
-        returnedResults: data.ResultSet?.totalResultsReturned || 0,
-        hasResultSet: !!data.ResultSet,
-        hasResult: !!(data.ResultSet?.Result),
-        resultLength: data.ResultSet?.Result?.length || 0,
+        totalResults: data.totalResultsAvailable || 0,
+        returnedResults: data.totalResultsReturned || 0,
+        hasHits: !!(data as any).hits,
+        hitLength: (data as any).hits?.length || 0,
         rawResponse: process.env.NODE_ENV === 'development' ? data : '[hidden in production]'
       });
 
-      if (!data.ResultSet) {
-        console.error('❌ ResultSetが存在しません:', data);
-        return [];
+      // 新しいAPIレスポンス構造をチェック
+      if ((data as any).hits && (data as any).hits.length > 0) {
+        console.log(`✅ ${(data as any).hits.length}件の商品を取得: "${query}"`);
+        return (data as any).hits;
       }
 
-      if (!data.ResultSet.Result || data.ResultSet.Result.length === 0) {
-        console.warn(`⚠️ 検索結果が0件: "${query}"`);
-        console.log('ResultSetの詳細:', {
-          totalResultsAvailable: data.ResultSet.totalResultsAvailable,
-          totalResultsReturned: data.ResultSet.totalResultsReturned,
-          firstResultStart: (data.ResultSet as any).firstResultPosition
-        });
-        return [];
+      // 従来のResultSet構造もサポート（後方互換性）
+      if (data.ResultSet && data.ResultSet.Result && data.ResultSet.Result.length > 0) {
+        console.log(`✅ ${data.ResultSet.Result.length}件の商品を取得（ResultSet形式）: "${query}"`);
+        return data.ResultSet.Result;
       }
 
-      console.log(`✅ ${data.ResultSet.Result.length}件の商品を取得: "${query}"`);
-      return data.ResultSet.Result;
+      console.warn(`⚠️ 検索結果が0件: "${query}"`);
+      console.log('レスポンスの詳細:', {
+        totalResultsAvailable: data.totalResultsAvailable || (data.ResultSet?.totalResultsAvailable),
+        totalResultsReturned: data.totalResultsReturned || (data.ResultSet?.totalResultsReturned),
+        hasHits: !!((data as any).hits),
+        hasResultSet: !!(data.ResultSet)
+      });
+      return [];
     } catch (error) {
       console.error('Error searching Yahoo Shopping products:', error);
       

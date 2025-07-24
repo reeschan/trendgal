@@ -264,17 +264,18 @@ export class AttributeInferenceService {
 
   private convertYahooProduct(yahooProduct: any, category: string): Product {
     return {
-      id: `yahoo_${Math.random().toString(36).substr(2, 9)}`,
-      name: yahooProduct.Name,
-      price: parseInt(yahooProduct.Price) || 0,
-      originalPrice: parseInt(yahooProduct.Price) || 0,
-      imageUrl: yahooProduct.Image?.Medium || yahooProduct.Image?.Small || '',
-      shopName: yahooProduct.Brand || 'ブランド名不明',
-      shopUrl: yahooProduct.Url,
+      id: yahooProduct.code || `yahoo_${Math.random().toString(36).substr(2, 9)}`,
+      name: yahooProduct.name || yahooProduct.headLine || '商品名不明',
+      price: yahooProduct.price || 0,
+      originalPrice: yahooProduct.premiumPrice || yahooProduct.price || 0,
+      imageUrl: yahooProduct.image?.small || yahooProduct.image?.medium || yahooProduct.exImage?.url || '/images/placeholder.svg',
+      shopName: yahooProduct.brand?.name || yahooProduct.seller?.name || 'ブランド名不明',
+      shopUrl: yahooProduct.url || '#',
       category: category as any,
       tags: [category],
-      rating: yahooProduct.Review?.Rate ? parseFloat(yahooProduct.Review.Rate) : undefined,
-      reviewCount: yahooProduct.Review?.Count ? parseInt(yahooProduct.Review.Count) : undefined
+      rating: yahooProduct.review?.rate ? parseFloat(yahooProduct.review.rate) : undefined,
+      reviewCount: yahooProduct.review?.count ? parseInt(yahooProduct.review.count) : undefined,
+      similarity: 0.8 + Math.random() * 0.2 // 類似度をランダムに設定
     };
   }
 
