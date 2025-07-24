@@ -49,11 +49,19 @@ export const GalCharacter = ({
   };
 
   const bounceAnimation = {
-    excited: { y: [0, -10, 0], transition: { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } },
-    thinking: { rotate: [-2, 2, -2], transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' } },
-    happy: { scale: [1, 1.1, 1], transition: { duration: 1, repeat: Infinity, ease: 'easeInOut' } },
-    surprised: { scale: [1, 1.2, 1], y: [0, -5, 0], transition: { duration: 0.5, repeat: 2 } },
-    winking: { scale: [1, 0.9, 1], transition: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } }
+    excited: { y: [0, -10, 0] },
+    thinking: { rotate: [-2, 2, -2] },
+    happy: { scale: [1, 1.1, 1] },
+    surprised: { scale: [1, 1.2, 1], y: [0, -5, 0] },
+    winking: { scale: [1, 0.9, 1] }
+  };
+
+  const transitionConfig = {
+    excited: { duration: 0.6, repeat: Infinity, ease: 'easeInOut' },
+    thinking: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+    happy: { duration: 1, repeat: Infinity, ease: 'easeInOut' },
+    surprised: { duration: 0.5, repeat: 2 },
+    winking: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' }
   };
 
   return (
@@ -69,6 +77,7 @@ export const GalCharacter = ({
       <motion.div
         className="relative"
         animate={bounceAnimation[mood]}
+        transition={transitionConfig[mood]}
       >
         <motion.div
           className={`${sizeClasses[size]} rounded-full shadow-lg flex items-center justify-center relative overflow-hidden border-4 border-white`}
