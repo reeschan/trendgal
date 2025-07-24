@@ -1,24 +1,58 @@
 export interface YahooShoppingProduct {
-  Name: string;
-  Description: string;
-  Price: string;
-  PriceLabel: string;
-  Url: string;
-  Image?: {
-    Small?: string;
-    Medium?: string;
+  index: number;
+  name: string;
+  description: string;
+  headLine: string;
+  url: string;
+  inStock: boolean;
+  code: string;
+  condition: string;
+  imageId: string;
+  image: {
+    small?: string;
+    medium?: string;
   };
-  Brand?: string;
-  Review?: {
-    Rate: string;
-    Count: string;
+  review: {
+    rate?: string;
+    count?: string;
   };
-  Shipping?: string;
-  GenreCategory?: string;
+  affiliateRate: number;
+  price: number;
+  premiumPrice: number;
+  premiumPriceStatus: boolean;
+  premiumDiscountRate?: number;
+  premiumDiscountType?: string;
+  priceLabel: any;
+  point: any;
+  shipping: any;
+  genreCategory: any;
+  parentGenreCategories: any[];
+  brand: {
+    name?: string;
+  };
+  parentBrands: any[];
+  janCode: string;
+  payment: string;
+  releaseDate?: string;
+  seller: {
+    name?: string;
+  };
+  delivery: any;
+  exImage: {
+    url?: string;
+  };
 }
 
 export interface YahooShoppingResponse {
-  ResultSet: {
+  totalResultsAvailable: number;
+  totalResultsReturned: number;
+  firstResultsPosition: number;
+  request: {
+    query: string;
+  };
+  hits: YahooShoppingProduct[];
+  // 旧形式との互換性のため
+  ResultSet?: {
     Result: YahooShoppingProduct[];
     totalResultsReturned: number;
     totalResultsAvailable: number;
@@ -101,15 +135,15 @@ export class YahooShoppingService {
         query: query,
         totalResults: data.totalResultsAvailable || 0,
         returnedResults: data.totalResultsReturned || 0,
-        hasHits: !!(data as any).hits,
-        hitLength: (data as any).hits?.length || 0,
+        hasHits: !!data.hits,
+        hitLength: data.hits?.length || 0,
         rawResponse: process.env.NODE_ENV === 'development' ? data : '[hidden in production]'
       });
 
       // 新しいAPIレスポンス構造をチェック
-      if ((data as any).hits && (data as any).hits.length > 0) {
-        console.log(`✅ ${(data as any).hits.length}件の商品を取得: "${query}"`);
-        return (data as any).hits;
+      if (data.hits && data.hits.length > 0) {
+        console.log(`✅ ${data.hits.length}件の商品を取得: "${query}"`);
+        return data.hits;
       }
 
       // 従来のResultSet構造もサポート（後方互換性）
@@ -122,7 +156,7 @@ export class YahooShoppingService {
       console.log('レスポンスの詳細:', {
         totalResultsAvailable: data.totalResultsAvailable || (data.ResultSet?.totalResultsAvailable),
         totalResultsReturned: data.totalResultsReturned || (data.ResultSet?.totalResultsReturned),
-        hasHits: !!((data as any).hits),
+        hasHits: !!data.hits,
         hasResultSet: !!(data.ResultSet)
       });
       return [];
