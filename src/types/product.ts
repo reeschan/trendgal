@@ -45,6 +45,7 @@ export interface AnalysisResult {
   detectedItems: DetectedItem[];
   overallStyle: string;
   colorPalette: string[];
+  colorPaletteInfo?: ColorInfo[];
   recommendations: Product[];
   confidence: number;
 }
@@ -53,4 +54,10 @@ export interface Color {
   hex: string;
   name: string;
   percentage: number;
+}
+
+export interface ColorInfo {
+  hex: string;
+  percentage: number;
+  rgb: { r: number; g: number; b: number };
 }

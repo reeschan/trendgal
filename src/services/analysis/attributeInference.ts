@@ -2,6 +2,7 @@ import { GoogleVisionResponse } from '@/types/analysis';
 import { DetectedItem, AnalysisResult, ItemAttributes, Product } from '@/types/product';
 import { YahooShoppingService } from '@/services/api/yahooShopping';
 import { getGeminiService, VisionAnalysisData } from '@/services/api/gemini';
+import { GoogleVisionService } from '@/services/api/googleVision';
 
 export class AttributeInferenceService {
   private yahooShopping: YahooShoppingService;
@@ -12,9 +13,9 @@ export class AttributeInferenceService {
     this.useGemini = process.env.GEMINI_API_KEY ? true : false;
   }
   
-  async processVisionResult(visionResult: GoogleVisionResponse): Promise<AnalysisResult> {
-    const detectedItems = this.inferFashionItems(visionResult);
-    const colorPalette = this.extractColorPalette(visionResult);
+  async processVisionResult(visionResult: GoogleVisionResponse, imageBase64?: string): Promise<AnalysisResult> {
+    const detectedItems = await this.inferFashionItems(visionResult, imageBase64);
+    const colorPaletteResult = this.extractColorPalette(visionResult);
     const overallStyle = this.inferOverallStyle(visionResult.labelAnnotations);
     
     // 検出されたアイテムに基づいて商品を検索
@@ -24,7 +25,8 @@ export class AttributeInferenceService {
     return {
       detectedItems,
       overallStyle,
-      colorPalette,
+      colorPalette: colorPaletteResult.colors,
+      colorPaletteInfo: colorPaletteResult.colorInfo,
       recommendations,
       confidence: this.calculateOverallConfidence(detectedItems)
     };
@@ -242,16 +244,6 @@ export class AttributeInferenceService {
       itemName = typeMap[item.type] || item.type;
     }
     
-    // 代表色（最初の色）のみを使用
-    const colorQuery = item.attributes.colors?.length > 0 
-      ? this.getColorName(item.attributes.colors[0]) 
-      : '';
-    
-    // 単色 + カテゴリの形式で検索クエリを作成
-    if (colorQuery && colorQuery !== '色') {
-      return `${colorQuery} ${itemName}`;
-    }
-    
     return itemName;
   }
 
@@ -295,9 +287,9 @@ export class AttributeInferenceService {
     const mockProducts: Product[] = [];
     
     detectedItems.forEach((item, index) => {
-      const colorName = item.attributes.colors?.length > 0 
-        ? this.getColorName(item.attributes.colors[0]) 
-        : 'カラー';
+      const colorCode = item.attributes.colors?.length > 0 
+        ? item.attributes.colors[0] 
+        : '#888888';
       
       const categoryName = this.createFallbackQuery(item);
       
@@ -305,14 +297,14 @@ export class AttributeInferenceService {
       for (let i = 0; i < 2; i++) {
         mockProducts.push({
           id: `mock_${item.id}_${i}`,
-          name: `${colorName}${categoryName} - サンプル商品${i + 1}`,
+          name: `${colorCode}${categoryName} - サンプル商品${i + 1}`,
           price: 1980 + Math.floor(Math.random() * 3000),
           originalPrice: 2980 + Math.floor(Math.random() * 3000),
           imageUrl: '/images/placeholder.svg',
           shopName: 'サンプルブランド',
           shopUrl: '#',
           category: item.type as any,
-          tags: [categoryName, colorName],
+          tags: [categoryName, colorCode],
           rating: 4.0 + Math.random(),
           reviewCount: Math.floor(Math.random() * 200) + 10
         });
@@ -351,10 +343,17 @@ export class AttributeInferenceService {
     };
   }
 
-  inferFashionItems(visionResult: GoogleVisionResponse): DetectedItem[] {
+  async inferFashionItems(
+    visionResult: GoogleVisionResponse, 
+    imageBase64?: string,
+    onProgress?: (progress: { current: number; total: number; currentItem: string }) => void
+  ): Promise<DetectedItem[]> {
     const items: DetectedItem[] = [];
     const labels = visionResult.labelAnnotations;
     const objects = visionResult.localizedObjectAnnotations || [];
+    
+    let totalItemsToProcess = 0;
+    let processedItems = 0;
     
     // ファッション関連のラベルを分類
     const fashionKeywords = {
@@ -366,16 +365,46 @@ export class AttributeInferenceService {
       outer: ['jacket', 'coat', 'blazer', 'cardigan', 'outerwear']
     };
 
+    // 総処理アイテム数をカウント
+    for (const [category, keywords] of Object.entries(fashionKeywords)) {
+      const matchingLabels = labels.filter(label => 
+        keywords.some(keyword => 
+          label.description.toLowerCase().includes(keyword)
+        )
+      );
+      totalItemsToProcess += matchingLabels.length;
+    }
+
+    // オブジェクト検出で追加されるアイテム数も計算
+    const additionalObjects = objects.filter(obj => 
+      !labels.some(label => label.description.toLowerCase().includes(obj.name.toLowerCase()))
+    );
+    totalItemsToProcess += additionalObjects.filter(obj => this.categorizeObject(obj.name)).length;
+
+    console.log(`🔍 Total items to process: ${totalItemsToProcess}`);
+
     // ラベルベースの検出
-    Object.entries(fashionKeywords).forEach(([category, keywords]) => {
+    for (const [category, keywords] of Object.entries(fashionKeywords)) {
       const matchingLabels = labels.filter(label => 
         keywords.some(keyword => 
           label.description.toLowerCase().includes(keyword)
         )
       );
 
-      matchingLabels.forEach((label, index) => {
-        const attributes = this.inferAttributes(label.description, visionResult);
+      for (const [index, label] of matchingLabels.entries()) {
+        processedItems++;
+        const itemName = `${label.description} (${category})`;
+        
+        onProgress?.({
+          current: processedItems,
+          total: totalItemsToProcess,
+          currentItem: itemName
+        });
+
+        console.log(`📊 Processing item ${processedItems}/${totalItemsToProcess}: ${itemName}`);
+
+        const boundingBox = this.findBoundingBox(label.description, objects);
+        const attributes = await this.inferAttributes(label.description, visionResult, boundingBox, imageBase64);
         
         items.push({
           id: `${category}_${index}`,
@@ -383,17 +412,29 @@ export class AttributeInferenceService {
           description: this.generateDescription(label.description, attributes),
           confidence: label.score,
           attributes,
-          boundingBox: this.findBoundingBox(label.description, objects)
+          boundingBox
         });
-      });
-    });
+      }
+    }
 
     // オブジェクト検出ベースの補完
-    objects.forEach((obj, index) => {
+    for (const [index, obj] of objects.entries()) {
       if (!items.some(item => item.description.toLowerCase().includes(obj.name.toLowerCase()))) {
         const category = this.categorizeObject(obj.name);
         if (category) {
-          const attributes = this.inferAttributes(obj.name, visionResult);
+          processedItems++;
+          const itemName = `${obj.name} (${category})`;
+          
+          onProgress?.({
+            current: processedItems,
+            total: totalItemsToProcess,
+            currentItem: itemName
+          });
+
+          console.log(`📊 Processing item ${processedItems}/${totalItemsToProcess}: ${itemName}`);
+
+          const boundingBox = this.convertBoundingBox(obj.boundingPoly);
+          const attributes = await this.inferAttributes(obj.name, visionResult, boundingBox, imageBase64);
           
           items.push({
             id: `object_${index}`,
@@ -401,17 +442,23 @@ export class AttributeInferenceService {
             description: this.generateDescription(obj.name, attributes),
             confidence: obj.score,
             attributes,
-            boundingBox: this.convertBoundingBox(obj.boundingPoly)
+            boundingBox
           });
         }
       }
-    });
+    }
 
-    return items.slice(0, 6); // 最大6個まで
+    // 重複するタイプを排除し、多様性を確保
+    const uniqueItems = this.removeDuplicateTypes(items);
+    return uniqueItems.slice(0, 6); // 最大6個まで
   }
 
-  private inferAttributes(itemName: string, visionResult: GoogleVisionResponse): ItemAttributes {
-    const colors = this.extractItemColors(visionResult);
+  private async inferAttributes(itemName: string, visionResult: GoogleVisionResponse, boundingBox?: any, imageBase64?: string): Promise<ItemAttributes> {
+    // BoundingBoxがある場合は個別に色を抽出、ない場合は全体の色を使用
+    const colors = boundingBox && imageBase64 
+      ? await this.extractColorsFromBoundingBox(imageBase64, boundingBox)
+      : this.extractItemColors(visionResult);
+      
     const style = this.inferStyle(itemName);
     const length = this.inferLength(itemName);
     const sleeve = this.inferSleeve(itemName);
@@ -431,15 +478,130 @@ export class AttributeInferenceService {
   private extractItemColors(visionResult: GoogleVisionResponse): string[] {
     const dominantColors = visionResult.imagePropertiesAnnotation.dominantColors.colors;
     
+    // Vision APIのrawデータをそのまま使用（面積順）
     return dominantColors
       .sort((a, b) => b.pixelFraction - a.pixelFraction)
       .slice(0, 3)
-      .map(color => this.rgbToHex(color.red, color.green, color.blue));
+      .map(color => {
+        const hex = this.rgbToHex(color.red, color.green, color.blue);
+        console.log(`🎨 Raw color: RGB(${color.red}, ${color.green}, ${color.blue}) → ${hex} (${(color.pixelFraction * 100).toFixed(1)}%)`);
+        return hex;
+      });
   }
 
   private rgbToHex(r: number, g: number, b: number): string {
-    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    console.log(`🎨 RGB to Hex: RGB(${r}, ${g}, ${b}) → ${hex}`);
+    return hex;
   }
+
+  private calculateSaturation(r: number, g: number, b: number): number {
+    const max = Math.max(r, g, b) / 255;
+    const min = Math.min(r, g, b) / 255;
+    const delta = max - min;
+    
+    if (max === 0) return 0;
+    return delta / max;
+  }
+
+  private removeDuplicateTypes(items: DetectedItem[]): DetectedItem[] {
+    const seenTypes = new Set<string>();
+    const uniqueItems: DetectedItem[] = [];
+    
+    // 信頼度順にソート
+    const sortedItems = items.sort((a, b) => b.confidence - a.confidence);
+    
+    for (const item of sortedItems) {
+      if (!seenTypes.has(item.type)) {
+        seenTypes.add(item.type);
+        uniqueItems.push(item);
+      } else {
+        console.log(`🚫 Duplicate type removed: ${item.type} - ${item.description}`);
+      }
+    }
+    
+    return uniqueItems;
+  }
+
+  private async extractColorsFromBoundingBox(imageBase64: string, boundingBox: any): Promise<string[]> {
+    try {
+      // BoundingBox領域を切り出した画像でVision APIを呼び出し
+      const croppedImageBase64 = await this.cropImageWithBoundingBox(imageBase64, boundingBox);
+      
+      if (!croppedImageBase64) {
+        console.warn('⚠️ Could not crop image, falling back to full image colors');
+        return [];
+      }
+
+      // 切り出した画像でVision APIの色分析を実行
+      const visionService = new GoogleVisionService();
+      const visionResult = await visionService.analyzeImage(croppedImageBase64);
+      
+      // 切り出した領域の支配的な色を取得
+      const colors = visionResult.imagePropertiesAnnotation.dominantColors.colors
+        .sort((a, b) => b.pixelFraction - a.pixelFraction)
+        .slice(0, 3)
+        .map(color => {
+          const hex = this.rgbToHex(color.red, color.green, color.blue);
+          console.log(`🎨 BoundingBox color (Vision API): RGB(${color.red}, ${color.green}, ${color.blue}) → ${hex} (${(color.pixelFraction * 100).toFixed(1)}%)`);
+          return hex;
+        });
+      
+      console.log(`🎨 Extracted ${colors.length} colors from bounding box using Vision API`);
+      return colors;
+      
+    } catch (error) {
+      console.error('❌ Error extracting colors from bounding box:', error);
+      return [];
+    }
+  }
+
+  private async cropImageWithBoundingBox(imageBase64: string, boundingBox: any): Promise<string | null> {
+    try {
+      // サーバーサイド環境チェック
+      if (typeof window !== 'undefined') {
+        console.warn('⚠️ Image cropping not available in browser environment');
+        return null;
+      }
+
+      // サーバーサイドでのみSharpを動的インポート
+      const sharp = (await import('sharp')).default;
+      
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const { width, height } = await sharp(imageBuffer).metadata();
+      
+      if (!width || !height) return null;
+
+      // BoundingBoxの座標を実際のピクセル座標に変換
+      const left = Math.floor(boundingBox.x * width);
+      const top = Math.floor(boundingBox.y * height);
+      const cropWidth = Math.floor(boundingBox.width * width);
+      const cropHeight = Math.floor(boundingBox.height * height);
+
+      // 座標の境界チェック
+      if (left < 0 || top < 0 || cropWidth <= 0 || cropHeight <= 0 || 
+          left + cropWidth > width || top + cropHeight > height) {
+        console.warn('⚠️ Invalid bounding box coordinates, using full image');
+        return imageBase64; // 元の画像をそのまま返す
+      }
+
+      console.log(`🔍 Cropping region: ${left}, ${top}, ${cropWidth}x${cropHeight} from ${width}x${height}`);
+
+      // BoundingBox領域を切り出し
+      const croppedBuffer = await sharp(imageBuffer)
+        .extract({ left, top, width: cropWidth, height: cropHeight })
+        .jpeg() // JPEG形式で出力
+        .toBuffer();
+
+      // Base64に変換して返す
+      return croppedBuffer.toString('base64');
+      
+    } catch (error) {
+      console.error('❌ Error cropping image:', error);
+      return null;
+    }
+  }
+
 
   private inferStyle(itemName: string): 'casual' | 'formal' | 'sporty' | 'elegant' | 'street' {
     const name = itemName.toLowerCase();
@@ -544,10 +706,8 @@ export class AttributeInferenceService {
   }
 
   private generateDescription(itemName: string, attributes: ItemAttributes): string {
-    const colorNames = attributes.colors.map(color => this.getColorName(color));
-    const colorText = colorNames.length > 0 ? colorNames.join('・') + 'の' : '';
-    
-    return `${colorText}${itemName}`;
+    // HTMLタグを生成せず、シンプルなテキストのみ返す
+    return itemName;
   }
 
   private getColorName(hex: string): string {
@@ -664,11 +824,30 @@ export class AttributeInferenceService {
     return Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
   }
 
-  extractColorPalette(visionResult: GoogleVisionResponse): string[] {
-    return visionResult.imagePropertiesAnnotation.dominantColors.colors
+  extractColorPalette(visionResult: GoogleVisionResponse): { colors: string[], colorInfo: Array<{hex: string, percentage: number, rgb: {r: number, g: number, b: number}}> } {
+    const colors = visionResult.imagePropertiesAnnotation.dominantColors.colors;
+    
+    // Vision APIのrawデータをそのまま使用（面積順）
+    const processedColors = colors
       .sort((a, b) => b.pixelFraction - a.pixelFraction)
-      .slice(0, 5)
-      .map(color => this.rgbToHex(color.red, color.green, color.blue));
+      .slice(0, 5);
+
+    const hexColors = processedColors.map(color => {
+      const hex = this.rgbToHex(color.red, color.green, color.blue);
+      console.log(`🎨 Palette color: RGB(${color.red}, ${color.green}, ${color.blue}) → ${hex} (${(color.pixelFraction * 100).toFixed(1)}%)`);
+      return hex;
+    });
+
+    const colorInfo = processedColors.map(color => ({
+      hex: this.rgbToHex(color.red, color.green, color.blue),
+      percentage: Math.round(color.pixelFraction * 100),
+      rgb: { r: color.red, g: color.green, b: color.blue }
+    }));
+
+    return {
+      colors: hexColors,
+      colorInfo
+    };
   }
 
   inferOverallStyle(labels: any[]): string {

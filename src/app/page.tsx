@@ -45,7 +45,7 @@ export default function Home() {
   const { analyzeImage, isAnalyzing: realAnalyzing, result: realResult, error } = useImageAnalysis();
   
   // ストリーミング解析フック
-  const { analyzeImageStreaming, isVisionAnalyzing, isRecommendationLoading, error: streamingError } = useStreamingAnalysis(
+  const { analyzeImageStreaming, isVisionAnalyzing, isRecommendationLoading, error: streamingError, progress } = useStreamingAnalysis(
     // Vision解析完了時
     (items, visionResult) => {
       setDetectedItems(items);
@@ -371,6 +371,7 @@ export default function Home() {
                 <AnalysisProgress
                   steps={analysisSteps}
                   currentMessage={currentMessage?.text}
+                  realProgress={progress}
                 />
               </motion.div>
             )}

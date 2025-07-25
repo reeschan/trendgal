@@ -1,8 +1,13 @@
-import { motion } from 'framer-motion';
-import { IoHeart, IoHeartOutline, IoStar, IoArrowForward } from 'react-icons/io5';
-import { Product } from '@/types/product';
-import Image from 'next/image';
-import { useState } from 'react';
+import { motion } from "framer-motion";
+import {
+  IoHeart,
+  IoHeartOutline,
+  IoStar,
+  IoArrowForward,
+} from "react-icons/io5";
+import { Product } from "@/types/product";
+import Image from "next/image";
+import { useState } from "react";
 
 interface ProductCardProps {
   product: Product;
@@ -10,7 +15,11 @@ interface ProductCardProps {
   showSimilarity?: boolean;
 }
 
-export const ProductCard = ({ product, onSelect, showSimilarity = true }: ProductCardProps) => {
+export const ProductCard = ({
+  product,
+  onSelect,
+  showSimilarity = true,
+}: ProductCardProps) => {
   const [isFavorited, setIsFavorited] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -23,15 +32,15 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
     if (onSelect) {
       onSelect(product);
     } else {
-      window.open(product.shopUrl, '_blank');
+      window.open(product.shopUrl, "_blank");
     }
   };
 
   const getSimilarityColor = (similarity: number) => {
-    if (similarity >= 90) return 'text-green-600 bg-green-100';
-    if (similarity >= 80) return 'text-blue-600 bg-blue-100';
-    if (similarity >= 70) return 'text-yellow-600 bg-yellow-100';
-    return 'text-gray-600 bg-gray-100';
+    if (similarity >= 90) return "text-green-600 bg-green-100";
+    if (similarity >= 80) return "text-blue-600 bg-blue-100";
+    if (similarity >= 70) return "text-yellow-600 bg-yellow-100";
+    return "text-gray-600 bg-gray-100";
   };
 
   return (
@@ -51,17 +60,17 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
           alt={product.name}
           fill
           className={`object-cover transition-all duration-300 group-hover:scale-110 ${
-            imageLoaded ? 'opacity-100' : 'opacity-0'
+            imageLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={() => setImageLoaded(true)}
         />
-        
+
         {!imageLoaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-pink-100 to-purple-100">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
           </div>
         )}
-        
+
         {/* セール・新着バッジ */}
         {product.isOnSale && (
           <motion.div
@@ -72,18 +81,20 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
             SALE
           </motion.div>
         )}
-        
+
         {/* 類似度バッジ */}
         {showSimilarity && product.similarity && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-bold ${getSimilarityColor(product.similarity)}`}
+            className={`absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-bold ${getSimilarityColor(
+              product.similarity
+            )}`}
           >
-            {product.similarity}%
+            {product.similarity * 100}%
           </motion.div>
         )}
-        
+
         {/* お気に入りボタン */}
         <motion.button
           whileHover={{ scale: 1.1 }}
@@ -98,13 +109,13 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
           )}
         </motion.button>
       </div>
-      
+
       {/* 商品情報エリア */}
       <div className="p-4">
         <h3 className="font-bold text-gray-800 mb-2 line-clamp-2 group-hover:text-pink-600 transition-colors">
           {product.name}
         </h3>
-        
+
         {/* 価格 */}
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xl font-bold text-pink-600">
@@ -116,7 +127,7 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
             </span>
           )}
         </div>
-        
+
         {/* レーティング */}
         {product.rating && (
           <div className="flex items-center gap-1 mb-2">
@@ -125,9 +136,9 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
                 <IoStar
                   key={star}
                   className={`text-sm ${
-                    star <= Math.floor(product.rating!) 
-                      ? 'text-yellow-400' 
-                      : 'text-gray-300'
+                    star <= Math.floor(product.rating!)
+                      ? "text-yellow-400"
+                      : "text-gray-300"
                   }`}
                 />
               ))}
@@ -137,10 +148,10 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
             </span>
           </div>
         )}
-        
+
         {/* ショップ名 */}
         <p className="text-sm text-gray-600 mb-3">{product.shopName}</p>
-        
+
         {/* タグ */}
         <div className="flex flex-wrap gap-1 mb-3">
           {product.tags.slice(0, 2).map((tag, index) => (
@@ -152,7 +163,7 @@ export const ProductCard = ({ product, onSelect, showSimilarity = true }: Produc
             </span>
           ))}
         </div>
-        
+
         {/* アクションボタン */}
         <motion.div
           whileHover={{ x: 5 }}

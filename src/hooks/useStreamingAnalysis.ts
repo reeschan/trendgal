@@ -7,6 +7,7 @@ interface UseStreamingAnalysisReturn {
   isVisionAnalyzing: boolean;
   isRecommendationLoading: boolean;
   error: string | null;
+  progress: { current: number; total: number; percentage: number; currentItem: string } | null;
 }
 
 export function useStreamingAnalysis(
@@ -17,6 +18,7 @@ export function useStreamingAnalysis(
   const [isVisionAnalyzing, setIsVisionAnalyzing] = useState(false);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number; percentage: number; currentItem: string } | null>(null);
 
   const analyzeImageStreaming = async (file: File, characterPersonality?: 'kurisu' | 'marin') => {
     try {
@@ -26,9 +28,9 @@ export function useStreamingAnalysis(
       // 画像をBase64に変換
       const base64 = await fileToBase64(file);
       
-      console.log('🔍 Starting Vision API analysis...');
+      console.log('🔍 Starting Vision API analysis with streaming...');
       
-      // Step 1: Vision API解析（即座に結果を表示）
+      // Step 1: Vision API解析（ストリーミングでプログレス表示）
       const visionResponse = await fetch('/api/analyze-vision', {
         method: 'POST',
         headers: {
@@ -36,25 +38,101 @@ export function useStreamingAnalysis(
         },
         body: JSON.stringify({
           imageBase64: base64,
-          filename: file.name
+          filename: file.name,
+          streaming: true
         })
       });
       
       if (!visionResponse.ok) {
         throw new Error(`Vision API failed: ${visionResponse.status}`);
       }
-      
-      const visionData = await visionResponse.json();
-      
-      if (!visionData.success) {
-        throw new Error(visionData.error || 'Vision analysis failed');
+
+      // SSEストリームを読み取り
+      const reader = visionResponse.body?.getReader();
+      const decoder = new TextDecoder();
+      let visionData: any = null;
+
+      console.log('📡 Starting SSE stream read...');
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log('📡 SSE stream ended');
+            break;
+          }
+
+          const chunk = decoder.decode(value);
+          console.log('📡 Received chunk:', chunk);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            console.log('📡 Processing line:', line);
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                console.log('📡 Parsed data:', data);
+                const eventLine = lines[lines.indexOf(line) - 1];
+                console.log('📡 Event line:', eventLine);
+                
+                if (eventLine?.startsWith('event: ')) {
+                  const eventType = eventLine.slice(7);
+                  console.log('📡 Event type:', eventType);
+                  
+                  switch (eventType) {
+                    case 'start':
+                      console.log('🔍 Vision analysis started:', data.message);
+                      const startProgress = { current: 0, total: 1, percentage: 0, currentItem: 'Vision API解析中...' };
+                      console.log('📊 Setting progress (start):', startProgress);
+                      setProgress(startProgress);
+                      break;
+                      
+                    case 'vision-complete':
+                      console.log('✅ Vision API completed:', data);
+                      const visionProgress = { current: 0, total: 1, percentage: 10, currentItem: 'アイテム検出中...' };
+                      console.log('📊 Setting progress (vision-complete):', visionProgress);
+                      setProgress(visionProgress);
+                      break;
+                      
+                    case 'progress':
+                      console.log('📊 Progress event received:', data);
+                      const progressUpdate = {
+                        current: data.current,
+                        total: data.total,
+                        percentage: data.percentage,
+                        currentItem: data.currentItem
+                      };
+                      console.log('📊 Setting progress (progress):', progressUpdate);
+                      setProgress(progressUpdate);
+                      break;
+                      
+                    case 'complete':
+                      console.log('✅ Vision analysis completed');
+                      visionData = data;
+                      setProgress({ current: data.data.progressStats.totalItemsDetected, total: data.data.progressStats.totalItemsDetected, percentage: 100, currentItem: '完了!' });
+                      break;
+                      
+                    case 'error':
+                      throw new Error(data.error);
+                  }
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse SSE data:', parseError);
+              }
+            }
+          }
+        }
       }
       
-      console.log('✅ Vision analysis completed immediately');
-      setIsVisionAnalyzing(false);
+      if (!visionData || !visionData.success) {
+        throw new Error('Vision analysis failed');
+      }
       
-      // Vision結果を即座に表示
-      onVisionComplete(visionData.data.detectedItems, visionData.visionResult);
+      setIsVisionAnalyzing(false);
+      setProgress(null);
+      
+      // Vision結果を表示
+      onVisionComplete(visionData.data.detectedItems, visionData.visionResult || {});
       
       // Step 2: 商品推薦を非同期で取得（スケルトン表示）
       setIsRecommendationLoading(true);
@@ -103,7 +181,8 @@ export function useStreamingAnalysis(
     analyzeImageStreaming,
     isVisionAnalyzing,
     isRecommendationLoading,
-    error
+    error,
+    progress
   };
 }
 

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { DetectedItem } from '@/types/product';
 import { IoShirt, IoMedal, IoFootsteps, IoWatch } from 'react-icons/io5';
+import { ColorChips } from '@/components/ui/ColorChip';
 
 interface DetectedItemsProps {
   items: DetectedItem[];
@@ -142,11 +143,18 @@ export const DetectedItems = ({ items, imageUrl }: DetectedItemsProps) => {
                     
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-bold text-lg">
-                          {getTypeLabel(item.type)}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <ColorChips 
+                            colors={item.attributes.colors} 
+                            size={12}
+                            maxColors={3}
+                          />
+                          <h3 className="font-bold text-lg">
+                            {getTypeLabel(item.type)}
+                          </h3>
+                        </div>
                         <span className={`text-sm font-bold ${getConfidenceColor(item.confidence)}`}>
-                          {Math.round(item.confidence * 100)}%
+                          {item.confidence >= 1 ? Math.round(item.confidence) : Math.round(item.confidence * 100)}%
                         </span>
                       </div>
                       
@@ -159,23 +167,21 @@ export const DetectedItems = ({ items, imageUrl }: DetectedItemsProps) => {
                         {item.attributes.colors.length > 0 && (
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">色:</span>
-                            <div className="flex gap-1">
-                              {item.attributes.colors.map((color, colorIndex) => (
-                                <div
-                                  key={colorIndex}
-                                  className="w-4 h-4 rounded-full border border-gray-300"
-                                  style={{ backgroundColor: color }}
-                                  title={color}
-                                />
-                              ))}
-                            </div>
+                            <ColorChips 
+                              colors={item.attributes.colors} 
+                              size={16}
+                              maxColors={3}
+                            />
+                            <span className="text-xs text-gray-500 ml-1">
+                              {item.attributes.colors.length > 3 && `+${item.attributes.colors.length - 3}`}
+                            </span>
                           </div>
                         )}
                         
                         <div className="flex flex-wrap gap-2">
-                          {item.attributes.style && (
+                          {(item.attributes.style || item.attributes.pattern) && (
                             <span className="px-2 py-1 bg-white/60 rounded-full text-xs font-medium">
-                              {item.attributes.style}
+                              {[item.attributes.style, item.attributes.pattern].filter(Boolean).join(' ')}
                             </span>
                           )}
                           {item.attributes.length && (
@@ -186,11 +192,6 @@ export const DetectedItems = ({ items, imageUrl }: DetectedItemsProps) => {
                           {item.attributes.sleeve && (
                             <span className="px-2 py-1 bg-white/60 rounded-full text-xs font-medium">
                               {item.attributes.sleeve}
-                            </span>
-                          )}
-                          {item.attributes.pattern && (
-                            <span className="px-2 py-1 bg-white/60 rounded-full text-xs font-medium">
-                              {item.attributes.pattern}
                             </span>
                           )}
                         </div>

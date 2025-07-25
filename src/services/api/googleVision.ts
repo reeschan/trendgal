@@ -7,29 +7,43 @@ export class GoogleVisionService {
 
   constructor() {
     try {
-      if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-        throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY environment variable is not set');
+      // APIキーまたはサービスアカウントキーをチェック
+      if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY && !process.env.GOOGLE_API_KEY) {
+        throw new Error('Either GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_API_KEY environment variable must be set');
       }
 
-      let serviceAccountKey;
-      try {
-        serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-      } catch (parseError) {
-        throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY must be a valid JSON service account key, not an API key');
+      // APIキーが設定されている場合
+      if (process.env.GOOGLE_API_KEY) {
+        this.client = new ImageAnnotatorClient({
+          apiKey: process.env.GOOGLE_API_KEY
+        });
+        console.log('✅ Google Vision initialized with API key');
+        return;
       }
-      
-      // 秘密鍵の改行文字を正しく処理
-      if (serviceAccountKey.private_key) {
-        serviceAccountKey.private_key = serviceAccountKey.private_key.replace(/\\n/g, '\n');
-      }
-      
-      // サービスアカウントキーでGoogle Cloud認証を設定
-      const auth = new GoogleAuth({
-        credentials: serviceAccountKey,
-        scopes: ['https://www.googleapis.com/auth/cloud-platform']
-      });
 
-      this.client = new ImageAnnotatorClient({ auth });
+      // サービスアカウントキーが設定されている場合
+      if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+        let serviceAccountKey;
+        try {
+          serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        } catch (parseError) {
+          throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY must be a valid JSON service account key, not an API key');
+        }
+        
+        // 秘密鍵の改行文字を正しく処理
+        if (serviceAccountKey.private_key) {
+          serviceAccountKey.private_key = serviceAccountKey.private_key.replace(/\\n/g, '\n');
+        }
+        
+        // サービスアカウントキーでGoogle Cloud認証を設定
+        const auth = new GoogleAuth({
+          credentials: serviceAccountKey,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform']
+        });
+
+        this.client = new ImageAnnotatorClient({ auth });
+        console.log('✅ Google Vision initialized with service account key');
+      }
     } catch (error) {
       console.error('Failed to initialize Google Vision client:', error);
       throw error;
@@ -62,6 +76,13 @@ export class GoogleVisionService {
         throw new Error(`Vision API error: ${result.error.message}`);
       }
 
+      // デバッグ: 生の色データを出力
+      console.log('🎨 Raw Vision API colors:', result.imagePropertiesAnnotation?.dominantColors?.colors?.map(color => ({
+        color: color.color,
+        score: color.score,
+        pixelFraction: color.pixelFraction
+      })));
+
       // レスポンスを標準化
       const response: GoogleVisionResponse = {
         labelAnnotations: result.labelAnnotations?.map(label => ({
@@ -72,14 +93,18 @@ export class GoogleVisionService {
         
         imagePropertiesAnnotation: {
           dominantColors: {
-            colors: result.imagePropertiesAnnotation?.dominantColors?.colors?.map(color => ({
-              red: color.color?.red || 0,
-              green: color.color?.green || 0,
-              blue: color.color?.blue || 0,
-              alpha: color.color?.alpha?.value || undefined,
-              score: color.score || 0,
-              pixelFraction: color.pixelFraction || 0
-            })) || []
+            colors: result.imagePropertiesAnnotation?.dominantColors?.colors?.map(color => {
+              const processedColor = {
+                red: color.color?.red || 0,
+                green: color.color?.green || 0,
+                blue: color.color?.blue || 0,
+                alpha: color.color?.alpha?.value || undefined,
+                score: color.score || 0,
+                pixelFraction: color.pixelFraction || 0
+              };
+              console.log(`🔄 Color conversion: RGB(${color.color?.red || 0}, ${color.color?.green || 0}, ${color.color?.blue || 0}) → ${processedColor.red}, ${processedColor.green}, ${processedColor.blue}`);
+              return processedColor;
+            }) || []
           }
         },
         

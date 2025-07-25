@@ -5,9 +5,10 @@ import { AnalysisStep } from '@/types/analysis';
 interface AnalysisProgressProps {
   steps: AnalysisStep[];
   currentMessage?: string;
+  realProgress?: { current: number; total: number; percentage: number; currentItem: string } | null;
 }
 
-export const AnalysisProgress = ({ steps, currentMessage }: AnalysisProgressProps) => {
+export const AnalysisProgress = ({ steps, currentMessage, realProgress }: AnalysisProgressProps) => {
   const getStepIcon = (status: AnalysisStep['status']) => {
     switch (status) {
       case 'completed':
@@ -123,16 +124,28 @@ export const AnalysisProgress = ({ steps, currentMessage }: AnalysisProgressProp
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700">全体の進捗</span>
           <span className="text-sm text-gray-600">
-            {steps.filter(s => s.status === 'completed').length} / {steps.length} 完了
+            {realProgress ? (
+              `${realProgress.current} / ${realProgress.total} 完了`
+            ) : (
+              `${steps.filter(s => s.status === 'completed').length} / ${steps.length} 完了`
+            )}
           </span>
         </div>
+        
+        {realProgress && (
+          <div className="mb-2">
+            <span className="text-xs text-gray-500">
+              現在の処理: {realProgress.currentItem}
+            </span>
+          </div>
+        )}
         
         <div className="w-full bg-gray-200 rounded-full h-3">
           <motion.div
             className="h-3 rounded-full bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400"
             initial={{ width: 0 }}
             animate={{ 
-              width: `${(steps.filter(s => s.status === 'completed').length / steps.length) * 100}%` 
+              width: realProgress ? `${realProgress.percentage}%` : `${(steps.filter(s => s.status === 'completed').length / steps.length) * 100}%`
             }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
           />
