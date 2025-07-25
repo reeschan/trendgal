@@ -1,17 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ImageUploader } from '@/components/upload/ImageUploader';
 import { GalCharacter } from '@/components/character/GalCharacter';
 import { AnalysisProgress } from '@/components/analysis/AnalysisProgress';
 import { DetectedItems } from '@/components/analysis/DetectedItems';
 import { ProductList } from '@/components/shopping/ProductList';
+import { ProductRecommendationSkeleton } from '@/components/loading/ProductListSkeleton';
 import { useAppStore } from '@/stores/appStore';
 import { useUserStore } from '@/stores/userStore';
 import { mockAnalysisSteps, mockAnalysisResult, createCharacterMessages } from '@/services/mock/mockData';
 import { useImageAnalysis } from '@/hooks/useImageAnalysis';
+import { useStreamingAnalysis } from '@/hooks/useStreamingAnalysis';
 import { useCharacter } from '@/hooks/useCharacter';
+import { useTheme } from '@/hooks/useTheme';
 import { CHARACTER_MESSAGES } from '@/types/character';
 
 export default function Home() {
@@ -23,16 +26,54 @@ export default function Home() {
     analysisResult,
     recommendedProducts,
     currentMessage,
+    detectedItems,
+    visionAnalysisComplete,
+    isLoadingRecommendations,
     setUploadedImage,
     startAnalysis,
     updateAnalysisStep,
     setAnalysisResult,
+    setDetectedItems,
+    setVisionAnalysisComplete,
+    startRecommendationLoading,
+    setRecommendationComplete,
     setCurrentMessage,
     addMessage
   } = useAppStore();
 
   const { isFirstVisit, markVisit, nickname } = useUserStore();
   const { analyzeImage, isAnalyzing: realAnalyzing, result: realResult, error } = useImageAnalysis();
+  
+  // ストリーミング解析フック
+  const { analyzeImageStreaming, isVisionAnalyzing, isRecommendationLoading, error: streamingError } = useStreamingAnalysis(
+    // Vision解析完了時
+    (items, visionResult) => {
+      setDetectedItems(items);
+      setVisionAnalysisComplete(true);
+      setCurrentPhase('results');
+      
+      const completedMessage = characterMessages[2];
+      setCurrentMessage(completedMessage);
+      addMessage(completedMessage);
+    },
+    // 商品推薦完了時
+    (products) => {
+      setRecommendationComplete(products);
+      
+      setTimeout(() => {
+        const recommendMessage = characterMessages[3];
+        setCurrentMessage(recommendMessage);
+        addMessage(recommendMessage);
+      }, 500);
+    },
+    // エラー時
+    (error) => {
+      console.error('Streaming analysis failed:', error);
+      // エラー時はデモ版にフォールバック
+      simulateAnalysis();
+    }
+  );
+  
   const { 
     currentCharacter, 
     allCharacters, 
@@ -43,31 +84,68 @@ export default function Home() {
     getSectionTitles 
   } = useCharacter();
   
+  // テーマフック
+  const { theme, themeClasses } = useTheme(currentCharacter.personality);
+  
   const [currentPhase, setCurrentPhase] = useState<'upload' | 'analysis' | 'results'>('upload');
   const [useRealAnalysis, setUseRealAnalysis] = useState(true);
   const [characterMessages, setCharacterMessages] = useState<ReturnType<typeof createCharacterMessages>>([]);
 
+  // キャラクター変更時のメッセージ更新を強制実行する関数
+  const updateCharacterMessage = useCallback(() => {
+    console.log('🔄 updateCharacterMessage called for:', currentCharacter.name);
+    const newMessages = createCharacterMessages({
+      greeting: getMessage('greeting'),
+      thinking: getMessage('thinking'),
+      analysis: getMessage('analysis'),
+      recommendation: getMessage('recommendation'),
+      reaction: getMessage('reaction')
+    });
+    setCharacterMessages(newMessages);
+
+    // アップロードフェーズの時は即座に挨拶を表示
+    if (currentPhase === 'upload' && newMessages.length > 0) {
+      const welcomeMessage = newMessages[0];
+      console.log('💬 Setting welcome message:', welcomeMessage.text);
+      setCurrentMessage(welcomeMessage);
+      addMessage(welcomeMessage);
+    }
+  }, [getMessage, currentPhase, setCurrentMessage, addMessage, currentCharacter.name]);
+
+  // カスタムキャラクター変更関数（useEffectに任せて重複を防ぐ）
+  const handleCharacterChange = useCallback((characterId: string) => {
+    changeCharacter(characterId);
+    // useEffectがキャラクター変更を検知してメッセージを更新するので、ここでは何もしない
+  }, [changeCharacter]);
+
+  // ランダムキャラクター選択関数（useEffectに任せて重複を防ぐ）
+  const handleRandomCharacter = useCallback(() => {
+    randomizeCharacter();
+    // useEffectがキャラクター変更を検知してメッセージを更新するので、ここでは何もしない
+  }, [randomizeCharacter]);
+
   // キャラクターが変更された時にメッセージを更新
   useEffect(() => {
-    if (currentCharacter) {
-      const newMessages = createCharacterMessages({
-        greeting: getMessage('greeting'),
-        thinking: getMessage('thinking'),
-        analysis: getMessage('analysis'),
-        recommendation: getMessage('recommendation'),
-        reaction: getMessage('reaction')
-      });
-      setCharacterMessages(newMessages);
-      
-      // 初回訪問時の処理もここで実行
-      if (isFirstVisit && newMessages.length > 0) {
-        const welcomeMessage = newMessages[0];
-        setCurrentMessage(welcomeMessage);
-        addMessage(welcomeMessage);
-        markVisit();
-      }
+    updateCharacterMessage();
+    
+    // 初回訪問時の処理
+    if (isFirstVisit) {
+      markVisit();
     }
-  }, [currentCharacter?.id, getMessage, isFirstVisit, setCurrentMessage, addMessage, markVisit]); // 必要な依存関数を追加
+  }, [currentCharacter.id, updateCharacterMessage, isFirstVisit, markVisit]);
+
+  // フェーズが変更された時もメッセージを同期（アップロード時のみ）
+  useEffect(() => {
+    if (currentPhase === 'upload') {
+      // アップロードフェーズになった時は挨拶メッセージを表示
+      // ただし、キャラクター変更によるuseEffectと重複しないように少し遅延
+      const timer = setTimeout(() => {
+        updateCharacterMessage();
+      }, 150);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [currentPhase, updateCharacterMessage]);
 
 
   // デモ用の解析シミュレーション
@@ -127,7 +205,7 @@ export default function Home() {
     setUploadedImage(file);
     
     if (useRealAnalysis) {
-      // 実際のGoogle Vision API解析
+      // ストリーミング解析を開始
       setCurrentPhase('analysis');
       startAnalysis();
       
@@ -135,31 +213,11 @@ export default function Home() {
       setCurrentMessage(thinkingMessage);
       addMessage(thinkingMessage);
       
-      try {
-        const result = await analyzeImage(file);
-        if (result) {
-          setAnalysisResult(result);
-          setCurrentPhase('results');
-          
-          const completedMessage = characterMessages[2];
-          setCurrentMessage(completedMessage);
-          addMessage(completedMessage);
-          
-          setTimeout(() => {
-            const recommendMessage = characterMessages[3];
-            setCurrentMessage(recommendMessage);
-            addMessage(recommendMessage);
-          }, 2000);
-        } else {
-          // エラー時はデモ版にフォールバック
-          console.log('API analysis failed, falling back to demo');
-          simulateAnalysis();
-        }
-      } catch (err) {
-        console.error('Analysis error:', err);
-        // エラー時はデモ版にフォールバック
-        simulateAnalysis();
-      }
+      // 商品推薦の読み込み開始フラグを設定
+      startRecommendationLoading();
+      
+      // ストリーミング解析を実行（キャラクター性格を渡す）
+      await analyzeImageStreaming(file, currentCharacter.personality);
     } else {
       // デモ版の解析
       simulateAnalysis();
@@ -169,12 +227,13 @@ export default function Home() {
   const handleBackToUpload = () => {
     setCurrentPhase('upload');
     setUploadedImage(null);
+    // フェーズ変更のuseEffectがメッセージを更新するので、ここでは何もしない
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
+    <div className={`min-h-screen bg-gradient-to-br ${theme.colors.background}`}>
       {/* ヘッダー */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-red-100">
+      <header className={theme.styles.headerBg}>
         <div className="container mx-auto px-4 py-4">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -182,7 +241,7 @@ export default function Home() {
             className="flex items-center justify-between"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
+              <div className={`w-10 h-10 bg-gradient-to-r ${theme.colors.gradientHeader} rounded-full flex items-center justify-center text-white font-bold text-xl`}>
                 T
               </div>
               <div>
@@ -199,10 +258,10 @@ export default function Home() {
                   {allCharacters.map((char) => (
                     <button
                       key={char.id}
-                      onClick={() => changeCharacter(char.id)}
+                      onClick={() => handleCharacterChange(char.id)}
                       className={`w-8 h-8 rounded-full border-2 overflow-hidden transition-all ${
-                        currentCharacter?.id === char.id
-                          ? 'border-red-500 shadow-md'
+                        currentCharacter.id === char.id
+                          ? `border-[${theme.colors.primary}] shadow-md`
                           : 'border-gray-300 opacity-70 hover:opacity-100'
                       }`}
                     >
@@ -224,8 +283,8 @@ export default function Home() {
                     </button>
                   ))}
                   <button
-                    onClick={randomizeCharacter}
-                    className="w-8 h-8 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 flex items-center justify-center text-white text-xs hover:shadow-md transition-all"
+                    onClick={handleRandomCharacter}
+                    className={`w-8 h-8 rounded-full bg-gradient-to-r ${theme.styles.accentGradient} flex items-center justify-center text-white text-xs hover:shadow-md transition-all`}
                     title="ランダム選択"
                   >
                     🎲
@@ -239,7 +298,7 @@ export default function Home() {
                   onClick={() => setUseRealAnalysis(!useRealAnalysis)}
                   className={`px-3 py-1 rounded-full text-xs transition-colors ${
                     useRealAnalysis 
-                      ? 'bg-green-100 text-green-700 border border-green-300' 
+                      ? `bg-gradient-to-r ${theme.colors.gradient} text-white border-transparent` 
                       : 'bg-gray-100 text-gray-700 border border-gray-300'
                   }`}
                 >
@@ -249,7 +308,7 @@ export default function Home() {
               
               <div className="text-right">
                 <p className="text-sm text-gray-600">{getTitles().user}</p>
-                <p className="font-bold text-red-600">{nickname}</p>
+                <p className={`font-bold`} style={{ color: theme.colors.primary }}>{nickname}</p>
               </div>
             </div>
           </motion.div>
@@ -272,7 +331,7 @@ export default function Home() {
               }
               message={currentMessage?.text}
               size="lg"
-              avatarPath={currentCharacter?.avatarPath}
+              avatarPath={currentCharacter.avatarPath}
             />
           </motion.div>
 
@@ -316,7 +375,7 @@ export default function Home() {
               </motion.div>
             )}
 
-            {currentPhase === 'results' && analysisResult && (
+            {currentPhase === 'results' && (visionAnalysisComplete || analysisResult) && (
               <motion.div
                 key="results"
                 initial={{ opacity: 0, y: 20 }}
@@ -328,34 +387,69 @@ export default function Home() {
                 <div className="flex justify-center">
                   <button
                     onClick={handleBackToUpload}
-                    className="px-6 py-3 bg-white text-red-600 rounded-full shadow-md hover:shadow-lg transition-all duration-200 border border-red-200 hover:border-red-300"
+                    className={`px-6 py-3 bg-white rounded-full shadow-md hover:shadow-lg transition-all duration-200 border-2`}
+                    style={{ 
+                      color: theme.colors.primary, 
+                      borderColor: theme.colors.primary + '40',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = theme.colors.primary;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = theme.colors.primary + '40';
+                    }}
                   >
                     ← 新しい画像をアップロード
                   </button>
                 </div>
 
-                {/* 検出結果 */}
-                <DetectedItems
-                  items={analysisResult.detectedItems}
-                  imageUrl={uploadedImage ? URL.createObjectURL(uploadedImage) : undefined}
-                />
-
-                {/* おすすめ商品 */}
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <div className="text-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                      {getSectionTitles().results.title}
-                    </h2>
-                    <p className="text-gray-600">
-                      {getSectionTitles().results.description}
-                    </p>
-                  </div>
-
-                  <ProductList
-                    products={recommendedProducts}
-                    showFilters={true}
+                {/* 検出結果 - Vision API完了後すぐに表示 */}
+                {detectedItems.length > 0 && (
+                  <DetectedItems
+                    items={detectedItems}
+                    imageUrl={uploadedImage ? URL.createObjectURL(uploadedImage) : undefined}
                   />
-                </div>
+                )}
+
+                {/* おすすめ商品 - ストリーミング表示 */}
+                {isLoadingRecommendations ? (
+                  /* スケルトン表示 */
+                  <ProductRecommendationSkeleton />
+                ) : recommendedProducts.length > 0 ? (
+                  /* 商品リスト表示 */
+                  <div className="bg-white rounded-2xl shadow-lg p-6">
+                    <div className="text-center mb-6">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {getSectionTitles().results.title}
+                      </h2>
+                      <p className="text-gray-600">
+                        {getSectionTitles().results.description}
+                      </p>
+                    </div>
+
+                    <ProductList
+                      products={recommendedProducts}
+                      showFilters={true}
+                    />
+                  </div>
+                ) : analysisResult && (
+                  /* 既存のロジック（デモ版用） */
+                  <div className="bg-white rounded-2xl shadow-lg p-6">
+                    <div className="text-center mb-6">
+                      <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                        {getSectionTitles().results.title}
+                      </h2>
+                      <p className="text-gray-600">
+                        {getSectionTitles().results.description}
+                      </p>
+                    </div>
+
+                    <ProductList
+                      products={analysisResult.recommendations}
+                      showFilters={true}
+                    />
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

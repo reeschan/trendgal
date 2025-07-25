@@ -27,12 +27,12 @@ export const CHARACTERS: Character[] = [
     name: 'マリン',
     avatarPath: '/images/avatar2.png',
     personality: 'marin',
-    description: 'コスプレイヤーマリンのトレンドファッション'
+    description: '若者向けカジュアル＆トレンドファッション'
   }
 ];
 
 // フォールバック用のデフォルト画像
-export const DEFAULT_AVATAR_PATH = '/images/placeholder.svg';
+export const DEFAULT_AVATAR_PATH = '/images/avatar2.png';
 
 export const CHARACTER_MESSAGES: Record<string, CharacterMessage> = {
   kurisu: {
@@ -59,7 +59,7 @@ export const CHARACTER_TITLES: Record<string, { main: string; sub: string; user:
   },
   marin: {
     main: 'TrendGal',
-    sub: 'コスプレイヤーマリンのトレンドファッション',
+    sub: '若者向けカジュアル＆トレンドファッション',
     user: 'ユーザー:'
   }
 };

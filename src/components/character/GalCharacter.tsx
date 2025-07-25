@@ -15,17 +15,21 @@ export const GalCharacter = ({
   message, 
   position = 'right',
   size = 'md',
-  avatarPath = '/images/avatar.jpg'
+  avatarPath = '/images/avatar2.png'
 }: GalCharacterProps) => {
   const [imageError, setImageError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // 初期ロード状態をfalseに変更
+  const [currentAvatarPath, setCurrentAvatarPath] = useState(avatarPath);
 
   // avatarPathが変更された時に状態をリセット
   useEffect(() => {
-    setImageError(false);
-    setIsLoading(true);
-    console.log(`🔄 Loading new avatar: ${avatarPath}`);
-  }, [avatarPath]);
+    if (avatarPath !== currentAvatarPath) {
+      setImageError(false);
+      setIsLoading(true);
+      setCurrentAvatarPath(avatarPath);
+      console.log(`🔄 Loading new avatar: ${avatarPath}`);
+    }
+  }, [avatarPath, currentAvatarPath]);
   const sizeClasses = {
     sm: 'w-16 h-16',
     md: 'w-24 h-24',
@@ -86,23 +90,33 @@ export const GalCharacter = ({
         >
           {!imageError ? (
             <img 
-              src={avatarPath} 
+              src={currentAvatarPath} 
               alt="TrendGal Avatar"
               className="w-full h-full object-cover rounded-full"
               onLoad={() => {
-                console.log(`✅ Avatar image loaded successfully: ${avatarPath}`);
+                console.log(`✅ Avatar image loaded successfully: ${currentAvatarPath}`);
                 setIsLoading(false);
               }}
               onError={(e) => {
-                console.error(`❌ Avatar image failed to load: ${avatarPath}`);
+                console.error(`❌ Avatar image failed to load: ${currentAvatarPath}`);
                 console.error('Image error details:', {
                   src: e.currentTarget.src,
                   naturalWidth: e.currentTarget.naturalWidth,
                   naturalHeight: e.currentTarget.naturalHeight,
                   complete: e.currentTarget.complete
                 });
-                setImageError(true);
-                setIsLoading(false);
+                
+                // avatar2.pngをフォールバックとして使用
+                if (currentAvatarPath !== '/images/avatar2.png') {
+                  console.log('🔄 Falling back to avatar2.png');
+                  setCurrentAvatarPath('/images/avatar2.png');
+                  setImageError(false);
+                  setIsLoading(true);
+                } else {
+                  // avatar2.pngも失敗した場合は絵文字アバターを表示
+                  setImageError(true);
+                  setIsLoading(false);
+                }
               }}
             />
           ) : (

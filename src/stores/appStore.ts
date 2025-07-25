@@ -9,12 +9,14 @@ interface AppState {
   isAnalyzing: boolean;
   currentStep: string | null;
   showResults: boolean;
+  isLoadingRecommendations: boolean; // 商品推薦の読み込み状態
   
   // 解析関連
   uploadedImage: File | null;
   analysisSteps: AnalysisStep[];
   detectedItems: DetectedItem[];
   analysisResult: AnalysisResult | null;
+  visionAnalysisComplete: boolean; // Vision API解析完了フラグ
   
   // 商品関連
   recommendedProducts: Product[];
@@ -39,6 +41,10 @@ interface AppActions {
   startAnalysis: () => void;
   updateAnalysisStep: (stepId: string, update: Partial<AnalysisStep>) => void;
   setAnalysisResult: (result: AnalysisResult) => void;
+  setDetectedItems: (items: DetectedItem[]) => void; // Vision API結果のみ設定
+  setVisionAnalysisComplete: (complete: boolean) => void; // Vision解析完了
+  startRecommendationLoading: () => void; // 商品推薦読み込み開始
+  setRecommendationComplete: (products: Product[]) => void; // 商品推薦完了
   resetAnalysis: () => void;
   
   // 商品関連
@@ -66,11 +72,13 @@ const initialState: AppState = {
   isAnalyzing: false,
   currentStep: null,
   showResults: false,
+  isLoadingRecommendations: false,
   
   uploadedImage: null,
   analysisSteps: [],
   detectedItems: [],
   analysisResult: null,
+  visionAnalysisComplete: false,
   
   recommendedProducts: [],
   selectedProduct: null,
@@ -98,7 +106,9 @@ export const useAppStore = create<AppStore>()(
         showResults: false,
         analysisResult: null,
         detectedItems: [],
-        recommendedProducts: []
+        recommendedProducts: [],
+        visionAnalysisComplete: false,
+        isLoadingRecommendations: false
       }),
 
       updateAnalysisStep: (stepId, update) => set((state) => ({
@@ -112,6 +122,32 @@ export const useAppStore = create<AppStore>()(
         detectedItems: result.detectedItems,
         recommendedProducts: result.recommendations,
         isAnalyzing: false,
+        showResults: true,
+        visionAnalysisComplete: true,
+        isLoadingRecommendations: false
+      }),
+
+      // Vision API結果のみ設定（商品推薦とは分離）
+      setDetectedItems: (items) => set({
+        detectedItems: items,
+        visionAnalysisComplete: true
+      }),
+
+      setVisionAnalysisComplete: (complete) => set({
+        visionAnalysisComplete: complete
+      }),
+
+      // 商品推薦の読み込み開始
+      startRecommendationLoading: () => set({
+        isLoadingRecommendations: true,
+        recommendedProducts: []
+      }),
+
+      // 商品推薦完了
+      setRecommendationComplete: (products) => set({
+        recommendedProducts: products,
+        isLoadingRecommendations: false,
+        isAnalyzing: false,
         showResults: true
       }),
 
@@ -122,7 +158,9 @@ export const useAppStore = create<AppStore>()(
         analysisSteps: [],
         detectedItems: [],
         analysisResult: null,
-        recommendedProducts: []
+        recommendedProducts: [],
+        visionAnalysisComplete: false,
+        isLoadingRecommendations: false
       }),
 
       // 商品関連

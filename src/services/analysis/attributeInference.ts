@@ -1,12 +1,15 @@
 import { GoogleVisionResponse } from '@/types/analysis';
 import { DetectedItem, AnalysisResult, ItemAttributes, Product } from '@/types/product';
 import { YahooShoppingService } from '@/services/api/yahooShopping';
+import { getGeminiService, VisionAnalysisData } from '@/services/api/gemini';
 
 export class AttributeInferenceService {
   private yahooShopping: YahooShoppingService;
+  private useGemini: boolean = true;
 
   constructor() {
     this.yahooShopping = new YahooShoppingService();
+    this.useGemini = process.env.GEMINI_API_KEY ? true : false;
   }
   
   async processVisionResult(visionResult: GoogleVisionResponse): Promise<AnalysisResult> {
@@ -15,7 +18,8 @@ export class AttributeInferenceService {
     const overallStyle = this.inferOverallStyle(visionResult.labelAnnotations);
     
     // 検出されたアイテムに基づいて商品を検索
-    const recommendations = await this.searchSimilarProducts(detectedItems);
+    // Geminiを使用する場合は、元のVisionレスポンスも渡す
+    const recommendations = await this.searchSimilarProducts(detectedItems, visionResult);
     
     return {
       detectedItems,
@@ -26,10 +30,78 @@ export class AttributeInferenceService {
     };
   }
 
-  private async searchSimilarProducts(detectedItems: DetectedItem[]): Promise<Product[]> {
+  async searchSimilarProducts(detectedItems: DetectedItem[], visionResult?: GoogleVisionResponse, characterPersonality?: 'kurisu' | 'marin'): Promise<Product[]> {
     const products: Product[] = [];
     const searchErrors: string[] = [];
     
+    // Geminiを使用する場合は、Vision APIの結果を変換してクエリを生成
+    if (this.useGemini) {
+      try {
+        // 元のVisionレスポンスがある場合は、より詳細なデータを使用
+        const visionData = visionResult 
+          ? this.convertVisionResponseToGeminiFormat(visionResult, characterPersonality)
+          : this.convertToGeminiFormat(detectedItems);
+        
+        const geminiService = getGeminiService();
+        const geminiResponse = await geminiService.generateSearchQueries(visionData);
+        
+        console.log('🤖 Gemini生成クエリ:');
+        geminiResponse.queries.forEach((q, i) => {
+          console.log(`  ${i + 1}. "${q.query}" (信頼度: ${(q.confidence * 100).toFixed(0)}%)`)
+          console.log(`     理由: ${q.reasoning}`);
+        });
+        
+        // Geminiが生成したクエリで検索
+        for (const queryInfo of geminiResponse.queries.slice(0, 5)) {
+          try {
+            // 全て単品検索として統一（結果数は一律5件）
+            const resultsCount = 5;
+            
+            const yahooProducts = await this.yahooShopping.searchProducts(queryInfo.query, {
+              results: resultsCount,
+              sort: '-score'
+            });
+            
+            if (yahooProducts.length > 0) {
+              console.log(`✅ ${yahooProducts.length}件の商品を発見: "${queryInfo.query}"`);
+              
+              // カテゴリを推測
+              const category = this.inferCategoryFromQuery(queryInfo.query, detectedItems);
+              
+              const convertedProducts = yahooProducts.map(product => {
+                const converted = this.convertYahooProduct(product, category);
+                converted.similarity = queryInfo.confidence; // Geminiの信頼度を類似度として使用
+                
+                // 検索クエリに基づいてタグを追加
+                if (queryInfo.query.includes('韓国')) converted.tags.push('韓国風');
+                if (queryInfo.query.includes('カジュアル')) converted.tags.push('カジュアル');
+                if (queryInfo.query.includes('オフィス')) converted.tags.push('オフィス');
+                if (queryInfo.query.includes('プチプラ')) converted.tags.push('プチプラ');
+                if (queryInfo.query.includes('トレンド')) converted.tags.push('トレンド');
+                if (queryInfo.query.includes('ナチュラル')) converted.tags.push('ナチュラル');
+                if (queryInfo.query.includes('ストリート')) converted.tags.push('ストリート');
+                
+                return converted;
+              });
+              products.push(...convertedProducts);
+            } else {
+              console.warn(`❌ 検索結果なし: "${queryInfo.query}"`);
+            }
+          } catch (error) {
+            console.error(`❌ 検索エラー: "${queryInfo.query}"`, error);
+          }
+        }
+        
+        if (products.length > 0) {
+          return products.slice(0, 10);
+        }
+      } catch (error) {
+        console.error('❌ Geminiクエリ生成エラー:', error);
+        console.log('🔄 既存のロジックにフォールバック');
+      }
+    }
+    
+    // 既存のロジック（Geminiが使えない場合のフォールバック）
     for (const item of detectedItems.slice(0, 3)) { // 最大3つのアイテムを検索
       try {
         const searchQuery = this.createSearchQuery(item);
@@ -279,7 +351,7 @@ export class AttributeInferenceService {
     };
   }
 
-  private inferFashionItems(visionResult: GoogleVisionResponse): DetectedItem[] {
+  inferFashionItems(visionResult: GoogleVisionResponse): DetectedItem[] {
     const items: DetectedItem[] = [];
     const labels = visionResult.labelAnnotations;
     const objects = visionResult.localizedObjectAnnotations || [];
@@ -592,14 +664,14 @@ export class AttributeInferenceService {
     return Math.sqrt(Math.pow(r1 - r2, 2) + Math.pow(g1 - g2, 2) + Math.pow(b1 - b2, 2));
   }
 
-  private extractColorPalette(visionResult: GoogleVisionResponse): string[] {
+  extractColorPalette(visionResult: GoogleVisionResponse): string[] {
     return visionResult.imagePropertiesAnnotation.dominantColors.colors
       .sort((a, b) => b.pixelFraction - a.pixelFraction)
       .slice(0, 5)
       .map(color => this.rgbToHex(color.red, color.green, color.blue));
   }
 
-  private inferOverallStyle(labels: any[]): string {
+  inferOverallStyle(labels: any[]): string {
     const styleKeywords = {
       'ガーリーカジュアル': ['cute', 'sweet', 'girly', 'casual'],
       'エレガント': ['elegant', 'sophisticated', 'formal', 'classy'],
@@ -619,10 +691,114 @@ export class AttributeInferenceService {
     return 'カジュアル';
   }
 
-  private calculateOverallConfidence(items: DetectedItem[]): number {
+  calculateOverallConfidence(items: DetectedItem[]): number {
     if (items.length === 0) return 0;
     
     const avgConfidence = items.reduce((sum, item) => sum + item.confidence, 0) / items.length;
     return Math.round(avgConfidence * 100) / 100;
+  }
+
+  private convertToGeminiFormat(detectedItems: DetectedItem[]): VisionAnalysisData {
+    // Vision APIの結果をGemini用の形式に変換
+    const labels = detectedItems.map(item => ({
+      description: item.description,
+      score: item.confidence
+    }));
+    
+    // 色情報を抽出
+    const allColors = new Map<string, number>();
+    detectedItems.forEach(item => {
+      item.attributes.colors?.forEach(colorHex => {
+        const rgb = this.hexToRgb(colorHex);
+        if (rgb) {
+          const key = `${rgb.r},${rgb.g},${rgb.b}`;
+          allColors.set(key, (allColors.get(key) || 0) + 1);
+        }
+      });
+    });
+    
+    // 頻度順に色をソート
+    const colors = Array.from(allColors.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([rgbStr, count]) => {
+        const [r, g, b] = rgbStr.split(',').map(Number);
+        return {
+          color: { red: r, green: g, blue: b },
+          score: count / detectedItems.length,
+          pixelFraction: 0.1
+        };
+      });
+    
+    // オブジェクト情報
+    const objects = detectedItems.map(item => ({
+      name: item.type,
+      score: item.confidence
+    }));
+    
+    return {
+      labels,
+      colors,
+      objects
+    };
+  }
+
+  private convertVisionResponseToGeminiFormat(visionResult: GoogleVisionResponse, characterPersonality?: 'kurisu' | 'marin'): VisionAnalysisData {
+    // 元のVision APIレスポンスを直接Gemini形式に変換
+    const labels = visionResult.labelAnnotations.map(label => ({
+      description: label.description,
+      score: label.score
+    }));
+    
+    const colors = visionResult.imagePropertiesAnnotation.dominantColors.colors
+      .slice(0, 10)
+      .map(color => ({
+        color: {
+          red: color.red,
+          green: color.green,
+          blue: color.blue
+        },
+        score: color.score,
+        pixelFraction: color.pixelFraction
+      }));
+    
+    const objects = (visionResult.localizedObjectAnnotations || []).map(obj => ({
+      name: obj.name,
+      score: obj.score
+    }));
+    
+    return {
+      labels,
+      colors,
+      objects,
+      characterPersonality
+    };
+  }
+
+  private inferCategoryFromQuery(query: string, detectedItems: DetectedItem[]): string {
+    const queryLower = query.toLowerCase();
+    
+    // クエリから直接カテゴリを推測
+    if (queryLower.includes('ジャケット') || queryLower.includes('コート') || queryLower.includes('アウター')) {
+      return 'outer';
+    } else if (queryLower.includes('シャツ') || queryLower.includes('ニット') || queryLower.includes('トップス')) {
+      return 'tops';
+    } else if (queryLower.includes('パンツ') || queryLower.includes('スカート') || queryLower.includes('ボトムス')) {
+      return 'bottoms';
+    } else if (queryLower.includes('ワンピース')) {
+      return 'dress';
+    } else if (queryLower.includes('靴') || queryLower.includes('スニーカー') || queryLower.includes('ブーツ')) {
+      return 'shoes';
+    } else if (queryLower.includes('バッグ') || queryLower.includes('アクセサリー')) {
+      return 'accessories';
+    }
+    
+    // コーデ系のクエリの場合は最初に検出されたアイテムのカテゴリを使用
+    if (queryLower.includes('コーデ') || queryLower.includes('セット')) {
+      return detectedItems[0]?.type || 'tops';
+    }
+    
+    // デフォルトは最初に検出されたアイテムのカテゴリ
+    return detectedItems[0]?.type || 'tops';
   }
 }

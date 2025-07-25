@@ -11,6 +11,9 @@ importers:
       '@google-cloud/vision':
         specifier: ^5.3.2
         version: 5.3.2
+      '@google/generative-ai':
+        specifier: ^0.24.1
+        version: 0.24.1
       framer-motion:
         specifier: ^12.23.9
         version: 12.23.9(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -128,6 +131,10 @@ packages:
   '@google-cloud/vision@5.3.2':
     resolution: {integrity: sha512-FkyC5Th3EKaTEQGHuMxFrI0keNze+Tr1JcsqMo/e1tVAe58myUQAD4kWX6vsXFD0o1Rr9c27Ee5XnhaHBcunxw==}
     engines: {node: '>=18'}
+
+  '@google/generative-ai@0.24.1':
+    resolution: {integrity: sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==}
+    engines: {node: '>=18.0.0'}
 
   '@grpc/grpc-js@1.13.4':
     resolution: {integrity: sha512-GsFaMXCkMqkKIvwCQjCrwH+GHbPKBjhwo/8ZuUkWHqbI73Kky9I+pQltrlT0+MWpedCoosda53lgjYfyEPgxBg==}
@@ -2251,6 +2258,8 @@ snapshots:
       google-gax: 5.0.1
     transitivePeerDependencies:
       - supports-color
+
+  '@google/generative-ai@0.24.1': {}
 
   '@grpc/grpc-js@1.13.4':
     dependencies:
